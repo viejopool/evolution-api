@@ -1,23 +1,19 @@
-import {
-  AuthenticationCreds,
-  AuthenticationState,
-  initAuthCreds,
-  proto,
-  SignalDataTypeMap,
-} from '@whiskeysockets/baileys';
+import { CacheService } from '@api/services/cache.service';
+import { Logger } from '@config/logger.config';
+import { AuthenticationCreds, AuthenticationState, initAuthCreds, proto, SignalDataTypeMap } from 'baileys';
 
-import { Logger } from '../config/logger.config';
-import { RedisCache } from '../libs/redis.client';
-
-export async function useMultiFileAuthStateRedisDb(cache: RedisCache): Promise<{
+export async function useMultiFileAuthStateRedisDb(
+  instanceName: string,
+  cache: CacheService,
+): Promise<{
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
 }> {
-  const logger = new Logger(useMultiFileAuthStateRedisDb.name);
+  const logger = new Logger('useMultiFileAuthStateRedisDb');
 
   const writeData = async (data: any, key: string): Promise<any> => {
     try {
-      return await cache.writeData(key, data);
+      return await cache.hSet(instanceName, key, data);
     } catch (error) {
       return logger.error({ localError: 'writeData', error });
     }
@@ -25,16 +21,16 @@ export async function useMultiFileAuthStateRedisDb(cache: RedisCache): Promise<{
 
   const readData = async (key: string): Promise<any> => {
     try {
-      return await cache.readData(key);
+      return await cache.hGet(instanceName, key);
     } catch (error) {
-      logger.error({ readData: 'writeData', error });
+      logger.error({ localError: 'readData', error });
       return;
     }
   };
 
   const removeData = async (key: string) => {
     try {
-      return await cache.removeData(key);
+      return await cache.hDelete(instanceName, key);
     } catch (error) {
       logger.error({ readData: 'removeData', error });
     }

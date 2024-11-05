@@ -1,28 +1,49 @@
-import 'express-async-errors';
-
+import { ProviderFiles } from '@api/provider/sessions';
+import { PrismaRepository } from '@api/repository/repository.service';
+import { HttpStatus, router } from '@api/routes/index.router';
+import { eventManager, waMonitor } from '@api/server.module';
+import { Auth, configService, Cors, HttpServer, ProviderSession, Webhook } from '@config/env.config';
+import { onUnexpectedError } from '@config/error.config';
+import { Logger } from '@config/logger.config';
+import { ROOT_DIR } from '@config/path.config';
+import * as Sentry from '@sentry/node';
+import { ServerUP } from '@utils/server-up';
 import axios from 'axios';
 import compression from 'compression';
 import cors from 'cors';
 import express, { json, NextFunction, Request, Response, urlencoded } from 'express';
 import { join } from 'path';
 
-import { Auth, configService, Cors, HttpServer, Rabbitmq, Webhook } from './config/env.config';
-import { onUnexpectedError } from './config/error.config';
-import { Logger } from './config/logger.config';
-import { ROOT_DIR } from './config/path.config';
-import { initAMQP } from './libs/amqp.server';
-import { initIO } from './libs/socket.server';
-import { ServerUP } from './utils/server-up';
-import { HttpStatus, router } from './whatsapp/routers/index.router';
-import { waMonitor } from './whatsapp/whatsapp.module';
-
 function initWA() {
   waMonitor.loadInstance();
 }
 
-function bootstrap() {
+async function bootstrap() {
   const logger = new Logger('SERVER');
   const app = express();
+  const dsn = process.env.SENTRY_DSN;
+
+  if (dsn) {
+    logger.info('Sentry - ON');
+    Sentry.init({
+      dsn: dsn,
+      environment: process.env.NODE_ENV || 'development',
+      tracesSampleRate: 1.0,
+      profilesSampleRate: 1.0,
+    });
+
+    Sentry.setupExpressErrorHandler(app);
+  }
+
+  let providerFiles: ProviderFiles = null;
+  if (configService.get<ProviderSession>('PROVIDER').ENABLED) {
+    providerFiles = new ProviderFiles(configService);
+    await providerFiles.onModuleInit();
+    logger.info('Provider:Files - ON');
+  }
+
+  const prismaRepository = new PrismaRepository(configService);
+  await prismaRepository.onModuleInit();
 
   app.use(
     cors({
@@ -118,13 +139,11 @@ function bootstrap() {
   ServerUP.app = app;
   const server = ServerUP[httpServer.TYPE];
 
+  eventManager.init(server);
+
   server.listen(httpServer.PORT, () => logger.log(httpServer.TYPE.toUpperCase() + ' - ON: ' + httpServer.PORT));
 
   initWA();
-
-  initIO(server);
-
-  if (configService.get<Rabbitmq>('RABBITMQ')?.ENABLED) initAMQP();
 
   onUnexpectedError();
 }

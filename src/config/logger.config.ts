@@ -58,10 +58,20 @@ enum Background {
 
 export class Logger {
   private readonly configService = configService;
-  constructor(private context = 'Logger') {}
+  private context: string;
+
+  constructor(context = 'Logger') {
+    this.context = context;
+  }
+
+  private instance = null;
 
   public setContext(value: string) {
     this.context = value;
+  }
+
+  public setInstance(value: string) {
+    this.instance = value;
   }
 
   private console(value: any, type: Type) {
@@ -75,6 +85,8 @@ export class Logger {
         console.log(
           /*Command.UNDERSCORE +*/ Command.BRIGHT + Level[type],
           '[Evolution API]',
+          Command.BRIGHT + Color[type],
+          this.instance ? `[${this.instance}]` : '',
           Command.BRIGHT + Color[type],
           `v${packageJson.version}`,
           Command.BRIGHT + Color[type],
@@ -99,6 +111,7 @@ export class Logger {
       } else {
         console.log(
           '[Evolution API]',
+          this.instance ? `[${this.instance}]` : '',
           process.pid.toString(),
           '-',
           `${formatDateLog(Date.now())}  `,
